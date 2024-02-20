@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-
 namespace ScreenBrightnessSetter
 {
     [StructLayout(LayoutKind.Sequential)]
@@ -24,7 +24,7 @@ namespace ScreenBrightnessSetter
         public char[] szDevice = new char[32];
     }
 
-    class Program
+    internal class Program : Form
     {
         [DllImport("kernel32", CharSet = CharSet.Unicode)]
         static extern IntPtr LoadLibrary(string lpFileName);
@@ -33,14 +33,13 @@ namespace ScreenBrightnessSetter
 
         [DllImport("user32.dll")]
         static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, EnumMonitorsDelegate lpfnEnum, IntPtr dwData);
-        
+
         [DllImport("User32.dll", CharSet = CharSet.Auto)]
         public static extern bool GetMonitorInfo(IntPtr hmonitor, [In, Out] MonitorInfo info);
 
         private delegate void DwmpSDRToHDRBoostPtr(IntPtr monitor, double brightness);
 
-
-        delegate bool EnumMonitorsDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref Rect lprcMonitor, IntPtr dwData);
+        private delegate bool EnumMonitorsDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref Rect lprcMonitor, IntPtr dwData);
 
         /// <summary>
         /// The struct that contains the display information
@@ -93,54 +92,60 @@ namespace ScreenBrightnessSetter
             return col;
         }
 
+        static void SetBrightness(double value)
+        {
+            var hmodule_dwmapi = LoadLibrary("dwmapi.dll");
+            DwmpSDRToHDRBoostPtr changeBrightness = Marshal.GetDelegateForFunctionPointer<DwmpSDRToHDRBoostPtr>(GetProcAddress(hmodule_dwmapi, 171));
+
+            DisplayInfoCollection monitors = GetDisplays();
+            foreach (DisplayInfo monitor in monitors)
+            {
+                Console.WriteLine("Changing brightness for monitor handle: " + monitor.MonitorHandle + " to: " + value);
+                changeBrightness(monitor.MonitorHandle, value);
+            }
+
+        }
+
 
 
         static void Main(string[] args)
         {
             double brightness = 1.0;
-            double maxBrightness = 6.0;
+            double maxBrightness = 10.0;
             double minBrightness = 1.0;
 
-            double argBrightness;
-
-            if (args.Length > 0)
+            Console.WriteLine("test");
+            Debug.WriteLine("test");
+            KeyboardHook hook = new KeyboardHook();
+            hook.RegisterHotKey(HotkeyModifierKeys.Control | HotkeyModifierKeys.Alt, Keys.F10);
+            hook.RegisterHotKey(HotkeyModifierKeys.Control | HotkeyModifierKeys.Alt, Keys.F11);
+            hook.KeyPressed += (s, e) =>
             {
-                if (!double.TryParse(args[0], out argBrightness))
+                Console.WriteLine("test");
+                Debug.WriteLine("test");
+                if (e.Key == Keys.F10)
                 {
-                    // .. error with input
-                    Console.WriteLine("Cannot parse, exiting: " + args[0]);
-                    return;
+                    // Reduce
+                    brightness = brightness - 1.0;
                 }
-            } else
-            {
-                Console.WriteLine("Enter desired brightness from 1.0 to 6.0:");
-                if (!double.TryParse(Console.ReadLine(), out argBrightness))
+                else
                 {
-                    // .. error with input
-                    Console.WriteLine("Cannot parse input, exiting");
-                    return;
+                    // Increase
+                    brightness = brightness + 1.0;
                 }
 
-            }
 
-            Console.WriteLine("Parsed " + argBrightness);
-            if (argBrightness < minBrightness)
-                argBrightness = minBrightness;
-            else if (argBrightness > maxBrightness)
-                argBrightness = maxBrightness;
+                if (brightness < minBrightness)
+                    brightness = minBrightness;
+                else if (brightness > maxBrightness)
+                    brightness = maxBrightness;
 
-            brightness = argBrightness;
-            Console.WriteLine("Setting brightness " + brightness);
+                Console.WriteLine("Setting brightness to " + brightness);
+                SetBrightness(brightness);
+            };
 
-            var hmodule_dwmapi = LoadLibrary("dwmapi.dll");
-            DwmpSDRToHDRBoostPtr changeBrightness = Marshal.GetDelegateForFunctionPointer<DwmpSDRToHDRBoostPtr>(GetProcAddress(hmodule_dwmapi, 171));
+            Application.Run();
 
-            DisplayInfoCollection monitors = GetDisplays();
-            foreach(DisplayInfo monitor in monitors)
-            {
-                Console.WriteLine("Changing brightness for monitor handle: " + monitor.MonitorHandle + " to: " + brightness);
-                changeBrightness(monitor.MonitorHandle, brightness);
-            }
         }
     }
 }
